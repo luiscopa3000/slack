@@ -1,0 +1,49 @@
+// index.js
+const { App } = require('@slack/bolt');
+let { registrationData, registrationQuestions, currentState } = require('./respuestas');
+
+const app = new App({
+    signingSecret: process.env.SLACK_SIGNING_SECRET,
+    token: process.env.SLACK_BOT_TOKEN,
+});
+
+const handleRegistration = async ({ message, say }) => {
+    if (currentState === 'finish') {
+        // Si el estado es 'finish', muestra el mensaje final y desactiva el manejo de eventos.
+        await say(registrationQuestions.finish.finalSuccessMessage);
+        app.message('i', async () => {
+            await say("El proceso de registro ha finalizado. Gracias por tu colaboración.");
+        });
+    } else {
+        const currentQuestion = registrationQuestions[currentState];
+        await say(`Bot: ${currentQuestion.question}`);
+    }
+}
+
+const handleUserResponse = async ({ message, say }) => {
+    const currentQuestion = registrationQuestions[currentState];
+    const answer = message.text;
+
+    if (currentQuestion.validator(answer)) {
+        registrationData[currentQuestion.property] = answer;
+        await say(currentQuestion.successMessage);
+        currentState = currentQuestion.nextState;
+
+        if (currentState === 'finish') {
+            await handleRegistration({ message, say }); // Muestra el mensaje final.
+        } else {
+            handleRegistration({ message, say });
+        }
+    } else {
+        await say(currentQuestion.errorMessage);
+        await say(`Bot: ${currentQuestion.question}`);
+    }
+};
+
+app.message('i', handleRegistration);
+app.message(handleUserResponse);
+
+(async () => {
+    await app.start(process.env.PORT || 12000);
+    console.log('⚡️ Bolt app is running!');
+})();
